@@ -233,6 +233,9 @@ class Pipeline:
         try:
             # 行情快照
             for symbol, ticker in context.tickers.items():
+                if not ticker or ticker.price <= 0:
+                    logger.warning("Skip invalid ticker snapshot: %s price=%s", symbol, getattr(ticker, "price", None))
+                    continue
                 MarketSnapshotRepo.save({
                     "symbol": symbol,
                     "timestamp": _parse_ts(ticker.timestamp),

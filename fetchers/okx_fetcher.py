@@ -78,17 +78,21 @@ class OKXFetcher(BaseFetcher):
 
     # ==================== Ticker ====================
 
-    def fetch_ticker(self, symbol: str) -> TickerData:
+    def fetch_ticker(self, symbol: str) -> Optional[TickerData]:
         """获取实时行情"""
         try:
             market_symbol = self._to_ccxt_symbol(symbol)
             raw = self._exchange.fetch_ticker(market_symbol)
             pct = float(raw.get("percentage", 0) or 0)
             abs_change = float(raw.get("change", 0) or 0)
+            price = float(raw.get("last", 0) or 0)
+            if price <= 0:
+                raise ValueError(f"invalid ticker price: {price}")
+
             ticker = TickerData(
                 symbol=symbol,
                 timestamp=datetime.utcnow().isoformat(),
-                price=float(raw.get("last", 0)),
+                price=price,
                 change_1h=0.0,  # ccxt ticker 不提供1h变化，后续从K线计算
                 change_24h=pct,  # 百分比涨跌幅
                 high_24h=float(raw.get("high", 0) or 0),
@@ -105,13 +109,17 @@ class OKXFetcher(BaseFetcher):
             return ticker
         except Exception as e:
             logger.error("[OKX] 获取 Ticker 失败 %s: %s", symbol, e)
-            return TickerData(symbol=symbol, source="okx")
+            return None
 
     def fetch_tickers(self, symbols: List[str]) -> Dict[str, TickerData]:
         """批量获取行情"""
         result = {}
         for symbol in symbols:
-            result[symbol] = self.fetch_ticker(symbol)
+            ticker = self.fetch_ticker(symbol)
+            if ticker is not None:
+                result[symbol] = ticker
+            else:
+                logger.warning("[OKX] Ticker skipped because fetch failed: %s", symbol)
             time.sleep(self._rate_limit / 1000.0)
         return result
 

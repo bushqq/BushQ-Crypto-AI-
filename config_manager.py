@@ -24,6 +24,7 @@ class Config:
 
     _instance: Optional["Config"] = None
     _data: Dict[str, Any] = {}
+    _loaded_path: Optional[str] = None
 
     def __new__(cls) -> "Config":
         if cls._instance is None:
@@ -34,7 +35,12 @@ class Config:
     def load(cls, path: Optional[str] = None) -> "Config":
         """加载配置文件"""
         cls._load_env_file()
-        config_path = path or _DEFAULT_CONFIG_PATH
+        config_path = os.path.abspath(path or _DEFAULT_CONFIG_PATH)
+        if cls._loaded_path and cls._loaded_path != config_path:
+            raise RuntimeError(
+                f"Config is already loaded from {cls._loaded_path}; "
+                f"refusing to silently replace it with {config_path}"
+            )
         if not os.path.exists(config_path):
             raise FileNotFoundError(f"配置文件不存在: {config_path}")
 
@@ -42,6 +48,7 @@ class Config:
             cls._data = yaml.safe_load(f) or {}
         cls._data = cls._resolve_env_values(cls._data)
         cls._apply_runtime_overrides()
+        cls._loaded_path = config_path
 
         logger.info("配置加载成功: %s", config_path)
         return cls()
@@ -61,7 +68,8 @@ class Config:
                 key, value = line.split("=", 1)
                 key = key.strip()
                 value = value.strip().strip('"').strip("'")
-                os.environ[key] = value
+                if key not in os.environ:
+                    os.environ[key] = value
 
     @classmethod
     def _resolve_env_values(cls, value: Any) -> Any:
