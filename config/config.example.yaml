@@ -1,0 +1,124 @@
+# BushQ Crypto AI 配置文件（模板）
+# 复制为 config.yaml 并填入你的 API Key
+
+# ==================== 系统 ====================
+system:
+  name: "BushQ Crypto AI"
+  version: "1.0.0"
+  debug: false
+  log_level: "INFO"  # DEBUG / INFO / WARNING / ERROR
+
+# ==================== 币种 ====================
+symbols:
+  - BTC-USDT-SWAP
+  - ETH-USDT-SWAP
+  - SOL-USDT-SWAP
+  - LTC-USDT-SWAP
+  - DOGE-USDT-SWAP
+
+# ==================== 交易所 (OKX) ====================
+exchange:
+  provider: "okx"
+  options:
+    rateLimit: 200
+  proxy: ""  # 如需代理填 http://127.0.0.1:7890
+
+# ==================== 新闻 (Tavily) ====================
+news:
+  provider: "tavily"
+  api_key: "${TAVILY_API_KEY}"
+  max_results: 12
+  total_limit: 80
+  search_depth: "advanced"
+  priority_keywords:
+    - "Federal Reserve"
+    - "CPI"
+    - "PCE"
+    - "nonfarm payrolls"
+    - "interest rates"
+    - "ETF"
+    - "SEC"
+    - "regulation"
+    - "liquidation"
+    - "exchange hack"
+    - "whale"
+    - "美元"
+    - "美联储"
+    - "通胀"
+    - "非农"
+    - "降息"
+    - "加息"
+    - "监管"
+    - "ETF"
+    - "爆仓"
+    - "金十"
+
+# ==================== 情绪指数 ====================
+sentiment:
+  fear_greed:
+    enabled: true
+    source: "alternative.me"
+
+# ==================== 币种信息 (CoinGecko) ====================
+coin_info:
+  provider: "coingecko"
+  cache_hours: 6
+
+# ==================== AI (DeepSeek) ====================
+ai:
+  provider: "deepseek"
+  api_key: "${DEEPSEEK_API_KEY}"
+  base_url: "https://api.deepseek.com"
+  model: "deepseek-v4-pro"
+  prompt_template: "templates/prompts/daily_analysis.md"
+  max_tokens: 4096
+  temperature: 0.3
+  timeout: 120
+
+# ==================== 推送 (企业微信) ====================
+notification:
+  provider: "wechat_work"
+  webhook_url: "${WECHAT_WORK_WEBHOOK_URL}"
+  enabled: true
+  msg_type: "markdown"
+
+# ==================== 报告 ====================
+report:
+  formats:
+    - "markdown"
+  output_dir: "data/reports"
+
+# ==================== 数据库 ====================
+database:
+  provider: "sqlite"
+  path: "data/crypto_intelligence.db"
+
+# ==================== 调度 ====================
+scheduler:
+  timezone: "Asia/Shanghai"
+  run_on_start: true
+  auto_push_enabled: false
+  retry:
+    max_retries: 3
+    delay_seconds: 60
+
+# ==================== 市场开盘提醒 ====================
+market_reminder:
+  enabled: true
+  markets:
+    - name: "亚股开盘"
+      remind_time: "08:00"  # 北京时间9:00开盘，提前1小时
+      market_info: "东京/港股/沪深 9:00 开盘"
+    - name: "欧股开盘"
+      remind_time: "14:00"  # 北京时间15:00开盘，提前1小时
+      market_info: "伦敦/法兰克福 15:00 开盘"
+    - name: "美股开盘"
+      remind_time: "20:30"  # 北京时间21:30开盘（夏令时），提前1小时
+      market_info: "NYSE/Nasdaq 21:30 开盘（夏令时）/ 22:30（冬令时）"
+
+# ==================== K线 ====================
+kline:
+  timeframes:
+    - "4h"
+    - "1d"
+  limit: 100
