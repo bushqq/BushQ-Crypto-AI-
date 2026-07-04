@@ -82,6 +82,21 @@ VALUE_CN_MAP = {
     "hold_existing_only": "仅持有已有仓位",
     "reduce_risk": "降低风险敞口",
     "no_position": "不建议建立仓位",
+    "technical": "技术面风险",
+    "positioning": "仓位/杠杆风险",
+    "sentiment_divergence": "情绪背离风险",
+    "sentiment divergence": "情绪背离风险",
+    "macro_uncertainty": "宏观不确定性风险",
+    "macro uncertainty": "宏观不确定性风险",
+    "fund_flow": "资金流风险",
+    "fund flow": "资金流风险",
+    "liquidity": "流动性风险",
+    "leverage": "杠杆风险",
+    "news": "新闻事件风险",
+    "regulatory": "监管风险",
+    "onchain": "链上风险",
+    "on_chain": "链上风险",
+    "on chain": "链上风险",
 }
 
 KEY_CN_MAP = {
