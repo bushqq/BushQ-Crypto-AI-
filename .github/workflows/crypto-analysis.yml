@@ -1,0 +1,80 @@
+name: BushQ Crypto AI
+
+on:
+  workflow_dispatch:
+    inputs:
+      send_mode:
+        description: "Push mode: summary, full, or config"
+        required: false
+        default: "full"
+  schedule:
+    # Every 8 hours.
+    - cron: "0 0,8,16 * * *"
+    # Europe market reminder: 14:00 Asia/Shanghai = 06:00 UTC.
+    - cron: "0 6 * * 1-5"
+    # US market reminder during daylight saving time: 20:30 Asia/Shanghai = 12:30 UTC.
+    - cron: "30 12 * * 1-5"
+
+concurrency:
+  group: bushq-crypto-ai
+  cancel-in-progress: false
+
+jobs:
+  analyze-and-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+      WECHAT_WORK_WEBHOOK_URL: ${{ secrets.WECHAT_WORK_WEBHOOK_URL }}
+      DEEPSEEK_MODEL: ${{ secrets.DEEPSEEK_MODEL }}
+      DISABLE_INTERVAL_SCHEDULE: "true"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: requirements-cloud.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-cloud.txt
+
+      - name: Prepare config
+        run: |
+          cp config/config.example.yaml config/config.yaml
+          mkdir -p data/reports logs
+
+      - name: Validate required secrets
+        shell: bash
+        run: |
+          missing=0
+          for name in DEEPSEEK_API_KEY TAVILY_API_KEY WECHAT_WORK_WEBHOOK_URL; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is missing. Add it in GitHub repository Secrets."
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Run analysis and push
+        run: |
+          MODE="${{ github.event.inputs.send_mode || 'full' }}"
+          python cloud_runner.py --create-config --send-mode "$MODE"
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bushq-reports
+          path: |
+            data/reports/
+            logs/
+          if-no-files-found: ignore
