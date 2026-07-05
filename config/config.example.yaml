@@ -71,7 +71,7 @@ ai:
   base_url: "https://api.deepseek.com"
   model: "deepseek-v4-pro"
   prompt_template: "templates/prompts/daily_analysis.md"
-  max_tokens: 4096
+  max_tokens: 8192
   temperature: 0.3
   timeout: 120
 

@@ -30,3 +30,4 @@ PySide6-Essentials>=6.8.0
 
 # Utils
 python-dateutil>=2.8.0
+json-repair>=0.30.0

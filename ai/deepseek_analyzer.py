@@ -67,19 +67,19 @@ class DeepSeekAnalyzer:
             {
                 "name": "primary",
                 "system": self._system_prompt,
-                "user": self._build_user_message(context, news_limit=12),
+                "user": self._build_user_message(context, news_limit=8),
                 "json_mode": True,
             },
             {
                 "name": "retry_compact",
                 "system": SYSTEM_PROMPT,
-                "user": self._build_user_message(context, news_limit=8),
+                "user": self._build_user_message(context, news_limit=4),
                 "json_mode": False,
             },
             {
                 "name": "retry_minimal",
                 "system": SYSTEM_PROMPT,
-                "user": self._build_user_message(context, news_limit=3, compact=True),
+                "user": self._build_user_message(context, news_limit=2, compact=True),
                 "json_mode": True,
             },
         ]
@@ -398,15 +398,32 @@ def _parse_json_object(raw_content: str) -> Dict:
         if content.lower().startswith("json"):
             content = content[4:].strip()
 
-    try:
-        parsed = json.loads(content)
-    except json.JSONDecodeError:
-        start = content.find("{")
-        end = content.rfind("}")
-        if start == -1 or end == -1 or end <= start:
-            preview = content[:200].replace("\n", " ")
-            raise ValueError(f"AI 返回不是 JSON，预览: {preview}")
-        parsed = json.loads(content[start:end + 1])
+    candidates = [content]
+    start = content.find("{")
+    end = content.rfind("}")
+    if start != -1 and end > start:
+        candidates.append(content[start:end + 1])
+
+    last_error: Optional[Exception] = None
+    for candidate in candidates:
+        try:
+            parsed = json.loads(candidate)
+            break
+        except json.JSONDecodeError as exc:
+            last_error = exc
+            try:
+                from json_repair import loads as repair_json_loads
+
+                parsed = repair_json_loads(candidate)
+                logger.info("[DeepSeek] 本地 JSON repair 成功")
+                break
+            except Exception as repair_exc:
+                last_error = repair_exc
+    else:
+        preview = content[:200].replace("\n", " ")
+        if isinstance(last_error, json.JSONDecodeError):
+            raise last_error
+        raise ValueError(f"AI 返回不是 JSON，预览: {preview}; repair_error={last_error}")
 
     if not isinstance(parsed, dict):
         raise ValueError("AI 返回 JSON 不是对象")
