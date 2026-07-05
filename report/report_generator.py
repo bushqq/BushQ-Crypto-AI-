@@ -128,6 +128,11 @@ KEY_CN_MAP = {
     "state": "状态",
     "technical_summary": "技术总结",
     "risk": "风险",
+    "entry_zone": "观察入场区域",
+    "near_support": "支撑附近",
+    "breakout_above": "突破确认",
+    "invalid_below": "失效位置",
+    "condition": "观察条件",
     "warnings": "提示",
     "unsupported_claims_removed": "已移除无依据结论",
     "score_evidence": "评分依据",
@@ -543,15 +548,19 @@ def _render_v31_summary(ai: AIAnalysis, context: Optional[MarketContext] = None)
             scenario = _safe_dict(item.get("scenario"))
             support = item.get("support", [])
             resistance = item.get("resistance", [])
+            entry_zone = _safe_dict(item.get("entry_zone"))
             if context:
                 fallback_support, fallback_resistance = _fallback_levels(symbol, context)
                 if not _format_levels(support):
                     support = fallback_support
                 if not _format_levels(resistance):
                     resistance = fallback_resistance
+                if not entry_zone:
+                    entry_zone = _fallback_entry_zone(symbol, context)
             sections.append(
                 f"- {symbol or '-'}: 压力 {_format_levels(resistance) or '-'}；"
                 f"支撑 {_format_levels(support) or '-'}；"
+                f"观察入场 {_format_entry_zone(entry_zone) or '-'}；"
                 f"突破场景 {_safe_text(scenario.get('if_breakout')) or '-'}；"
                 f"跌破场景 {_safe_text(scenario.get('if_breakdown')) or '-'}"
             )
@@ -627,6 +636,9 @@ def _render_v31_details(ai: AIAnalysis) -> list:
                 sections.append(f"- 支撑: {_format_levels(item.get('support'))}")
             if item.get("resistance"):
                 sections.append(f"- 压力: {_format_levels(item.get('resistance'))}")
+            entry_zone = _safe_dict(item.get("entry_zone"))
+            if entry_zone:
+                sections.append(f"- 观察入场区域: {_format_entry_zone(entry_zone)}")
             scenario = _safe_dict(item.get("scenario"))
             if scenario:
                 sections.append(f"- 突破场景: {_safe_text(scenario.get('if_breakout'))}")
@@ -691,6 +703,22 @@ def _fallback_levels(symbol: str, context: MarketContext) -> tuple[list, list]:
         if not resistances and ticker.high_24h:
             resistances = [round(ticker.high_24h, 6)]
     return supports, resistances
+
+
+def _fallback_entry_zone(symbol: str, context: MarketContext) -> dict:
+    support, resistance = _fallback_levels(symbol, context)
+    zone = {
+        "near_support": support[:2] if isinstance(support, list) else [],
+        "breakout_above": resistance[0] if isinstance(resistance, list) and resistance else "",
+        "invalid_below": support[0] if isinstance(support, list) and support else "",
+        "condition": "仅在价格接近支撑后企稳，或放量突破压力后观察；不构成买入建议。",
+        "evidence": [],
+    }
+    if support:
+        zone["evidence"].append(f"技术支撑: {_format_levels(support)}")
+    if resistance:
+        zone["evidence"].append(f"技术压力: {_format_levels(resistance)}")
+    return zone
 
 
 def _fallback_entry_condition(context: MarketContext) -> str:
@@ -777,6 +805,26 @@ def _format_event(value) -> str:
                 parts.append(f"{label}: {_format_value_cn(value.get(key))}")
         return " | ".join(parts) if parts else _format_value_cn(value)
     return _format_value_cn(value)
+
+
+def _format_entry_zone(value) -> str:
+    zone = _safe_dict(value)
+    if not zone:
+        return ""
+    parts = []
+    near_support = _format_levels(zone.get("near_support"))
+    breakout_above = _safe_text(zone.get("breakout_above"))
+    invalid_below = _safe_text(zone.get("invalid_below"))
+    condition = _safe_text(zone.get("condition"))
+    if near_support:
+        parts.append(f"支撑附近 {near_support}")
+    if breakout_above:
+        parts.append(f"突破 {breakout_above} 后确认")
+    if invalid_below:
+        parts.append(f"跌破 {invalid_below} 失效")
+    if condition:
+        parts.append(condition)
+    return "；".join(parts)
 
 
 def _format_levels(value) -> str:
