@@ -8,8 +8,8 @@ on:
         required: false
         default: "full"
   schedule:
-    # Every 8 hours.
-    - cron: "0 0,8,16 * * *"
+    # Asia market reminder: 08:00 Asia/Shanghai = 00:00 UTC.
+    - cron: "0 0 * * 1-5"
     # Europe market reminder: 14:00 Asia/Shanghai = 06:00 UTC.
     - cron: "0 6 * * 1-5"
     # US market reminder during daylight saving time: 20:30 Asia/Shanghai = 12:30 UTC.

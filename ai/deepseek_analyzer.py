@@ -76,6 +76,12 @@ class DeepSeekAnalyzer:
                 "user": self._build_user_message(context, news_limit=8),
                 "json_mode": False,
             },
+            {
+                "name": "retry_minimal",
+                "system": SYSTEM_PROMPT,
+                "user": self._build_user_message(context, news_limit=3, compact=True),
+                "json_mode": True,
+            },
         ]
 
         for attempt in attempts:
@@ -120,7 +126,15 @@ class DeepSeekAnalyzer:
             kwargs["response_format"] = {"type": "json_object"}
 
         response = self._client.chat.completions.create(**kwargs)
-        raw_content = response.choices[0].message.content or ""
+        choice = response.choices[0]
+        raw_content = choice.message.content or ""
+        if not raw_content:
+            logger.warning(
+                "[DeepSeek] 返回为空: finish_reason=%s prompt_tokens=%s completion_tokens=%s",
+                getattr(choice, "finish_reason", None),
+                getattr(getattr(response, "usage", None), "prompt_tokens", None),
+                getattr(getattr(response, "usage", None), "completion_tokens", None),
+            )
         preview = raw_content[:300].replace("\n", " ")
         logger.debug("[DeepSeek] 原始返回预览: %s", preview if preview else "<empty>")
         return raw_content
@@ -145,7 +159,7 @@ class DeepSeekAnalyzer:
             json_mode=True,
         )
 
-    def _build_user_message(self, context: MarketContext, news_limit: int = 20) -> str:
+    def _build_user_message(self, context: MarketContext, news_limit: int = 20, compact: bool = False) -> str:
         """将 MarketContext 转换为 V3.1 输入 JSON。"""
         payload = {
             "metadata": {
@@ -209,13 +223,13 @@ class DeepSeekAnalyzer:
                     "source": item.source or "unknown",
                     "url": item.url,
                     "published_at": item.published_at,
-                    "raw_summary": item.summary,
+                    "raw_summary": "" if compact else item.summary,
                     "sentiment": item.sentiment,
                     "relevance_score": 1 if item.title and item.url else 0,
                 }
                 for item in ((context.news.items[:news_limit]) if context.news else [])
             ],
-            "coin_info": [
+            "coin_info": [] if compact else [
                 {
                     "symbol": symbol,
                     "name": info.name,
@@ -236,6 +250,7 @@ class DeepSeekAnalyzer:
                 "output_language": "Chinese",
                 "no_markdown": True,
                 "json_contract": "Crypto Market Intelligence V3.1",
+                "compact_output": compact,
             },
         }
         return json.dumps(payload, ensure_ascii=False)

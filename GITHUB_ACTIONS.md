@@ -22,11 +22,11 @@
 
 `.github/workflows/crypto-analysis.yml` 会自动运行：
 
-- 每 8 小时一次
+- 北京时间 08:00，亚洲市场开盘前提醒
 - 北京时间 14:00，欧洲市场开盘前提醒
 - 北京时间 20:30，美股夏令时开盘前提醒
 
-亚洲开盘前提醒建议继续用本地软件或后续单独加一条 GitHub cron，因为 GitHub Actions 使用 UTC，跨日期表达需要单独处理。
+GitHub Actions 使用 UTC，所以 workflow 中写的是 UTC 时间：00:00、06:00、12:30。
 
 ## 手动运行
 
