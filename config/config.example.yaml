@@ -69,7 +69,7 @@ ai:
   provider: "deepseek"
   api_key: "${DEEPSEEK_API_KEY}"
   base_url: "https://api.deepseek.com"
-  model: "deepseek-v4-pro"
+  model: "${DEEPSEEK_MODEL}"
   prompt_template: "templates/prompts/daily_analysis.md"
   max_tokens: 8192
   temperature: 0.3
@@ -81,6 +81,13 @@ notification:
   webhook_url: "${WECHAT_WORK_WEBHOOK_URL}"
   enabled: true
   msg_type: "markdown"
+  summary_only: true
+
+# ==================== 宏观/市场结构/公开链上 ====================
+macro:
+  enabled: true
+  timeout: 15
+  proxy: ""
 
 # ==================== 报告 ====================
 report:
