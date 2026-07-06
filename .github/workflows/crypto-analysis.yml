@@ -8,12 +8,13 @@ on:
         required: false
         default: "full"
   schedule:
-    # Asia market reminder: 08:00 Asia/Shanghai = 00:00 UTC.
-    - cron: "0 0 * * 1-5"
-    # Europe market reminder: 14:00 Asia/Shanghai = 06:00 UTC.
-    - cron: "0 6 * * 1-5"
-    # US market reminder during daylight saving time: 20:30 Asia/Shanghai = 12:30 UTC.
-    - cron: "30 12 * * 1-5"
+    # Asia market reminder: 08:07 Asia/Shanghai = 00:07 UTC.
+    # Use non-zero minutes because GitHub scheduled jobs can be delayed or dropped near the top of the hour.
+    - cron: "7 0 * * 1-5"
+    # Europe market reminder: 14:07 Asia/Shanghai = 06:07 UTC.
+    - cron: "7 6 * * 1-5"
+    # US market reminder during daylight saving time: 20:37 Asia/Shanghai = 12:37 UTC.
+    - cron: "37 12 * * 1-5"
 
 concurrency:
   group: bushq-crypto-ai
