@@ -21,13 +21,26 @@ class WeChatWorkNotifier:
         self._summary_only = True
 
     def initialize(self, config: any) -> None:
-        self._webhook_url = config.get("notification.webhook_url", "")
+        self._webhook_url = self._normalize_webhook_url(
+            config.get("notification.webhook_url", "")
+        )
         self._msg_type = config.get("notification.msg_type", "markdown")
         self._summary_only = config.get("notification.summary_only", True)
         if not self._webhook_url:
             logger.warning("[WeChatWork] Webhook URL is not configured; push is disabled")
         else:
             logger.info("[WeChatWork] initialized (summary_only=%s)", self._summary_only)
+
+    @staticmethod
+    def _normalize_webhook_url(webhook_url: str) -> str:
+        url = (webhook_url or "").strip()
+        cleaned = url.lstrip(". \t\r\n")
+        if cleaned != url:
+            logger.warning("[WeChatWork] Webhook URL had invalid leading characters; cleaned automatically")
+        if cleaned and not cleaned.startswith(("http://", "https://")):
+            logger.error("[WeChatWork] invalid webhook URL scheme")
+            return ""
+        return cleaned
 
     @staticmethod
     def _byte_len(s: str) -> int:
