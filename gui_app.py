@@ -316,7 +316,7 @@ def load_env() -> Dict[str, str]:
     values: Dict[str, str] = {}
     if not env_path.exists():
         return values
-    for raw in env_path.read_text(encoding="utf-8").splitlines():
+    for raw in env_path.read_text(encoding="utf-8-sig").splitlines():
         if not raw.strip() or raw.strip().startswith("#") or "=" not in raw:
             continue
         key, value = raw.split("=", 1)
