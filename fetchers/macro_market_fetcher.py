@@ -72,7 +72,8 @@ class MacroMarketFetcher(BaseFetcher):
 
         summary_parts = []
         if dxy.get("value"):
-            summary_parts.append(f"DXY {dxy['value']:.2f}")
+            dxy_label = "DXY" if dxy.get("symbol") in {"DX-Y.NYB", "DX=F"} else "美元广义指数代理"
+            summary_parts.append(f"{dxy_label} {dxy['value']:.2f}")
         if yields.get("10y", {}).get("value"):
             summary_parts.append(f"美债10Y {yields['10y']['value']:.2f}%")
         return MacroData(
@@ -80,7 +81,7 @@ class MacroMarketFetcher(BaseFetcher):
             treasury_yields=yields,
             summary="; ".join(summary_parts) if summary_parts else "当前数据不足以支持该结论。",
             errors=errors,
-            source="yahoo_finance",
+            source="yahoo_finance/fred",
         )
 
     def fetch_market_structure(self) -> MarketStructureData:

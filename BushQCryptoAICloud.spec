@@ -10,7 +10,7 @@ a = Analysis(
         ('templates', 'templates'),
         ('assets', 'assets'),
     ],
-    hiddenimports=[],
+    hiddenimports=['json_repair'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

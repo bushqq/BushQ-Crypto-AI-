@@ -434,6 +434,25 @@ def _to_ai_analysis(parsed: Dict) -> AIAnalysis:
     market_phase_raw = parsed.get("market_phase", "")
     market_phase = _safe_dict(market_phase_raw) if isinstance(market_phase_raw, dict) else {}
     scores = _safe_dict(parsed.get("scores"))
+    market_phase_label = (
+        market_phase.get("label")
+        or market_phase.get("phase")
+        or market_phase.get("state")
+        or market_phase.get("stage")
+        or (market_phase_raw if not isinstance(market_phase_raw, dict) else "")
+    )
+    market_phase_reason = (
+        parsed.get("phase_reason", "")
+        or market_phase.get("reason", "")
+        or market_phase.get("evidence", "")
+        or market_phase.get("summary", "")
+    )
+    confidence = (
+        parsed.get("confidence", "")
+        or market_phase.get("confidence", "")
+        or scores.get("confidence", "")
+        or "low"
+    )
     macro = _safe_dict(parsed.get("macro"))
     news_impact = parsed.get("news_impact", {})
     symbols = parsed.get("symbols", {})
@@ -446,10 +465,10 @@ def _to_ai_analysis(parsed: Dict) -> AIAnalysis:
         data_quality=_safe_list(parsed.get("data_quality")),
         macro=macro,
         market_structure=_safe_dict(parsed.get("market_structure")),
-        market_summary=_safe_scalar(parsed.get("market_summary", "")) or _safe_scalar(macro.get("summary", "")) or _safe_scalar(market_phase.get("reason", "")),
+        market_summary=_safe_scalar(parsed.get("market_summary", "")) or _safe_scalar(macro.get("summary", "")) or _safe_scalar(market_phase_reason),
         risk_alerts=_safe_list(parsed.get("risk_alerts")),
-        market_phase=_safe_scalar(market_phase.get("label", parsed.get("market_phase", ""))),
-        phase_reason=_safe_scalar(parsed.get("phase_reason", "")) or _safe_scalar(market_phase.get("reason", "")),
+        market_phase=_safe_scalar(market_phase_label),
+        phase_reason=_safe_scalar(market_phase_reason),
         trend_strength=_safe_number(parsed.get("trend_strength", scores.get("trend_strength", 0))),
         market_score=_safe_number(parsed.get("market_score", scores.get("market_score", 0))),
         bullish_score=_safe_number(parsed.get("bullish_score", scores.get("bullish_score", 0))),
@@ -462,7 +481,7 @@ def _to_ai_analysis(parsed: Dict) -> AIAnalysis:
         sentiment=_safe_dict(parsed.get("sentiment")),
         position_guidance=_safe_dict(parsed.get("position_guidance")),
         symbol_analysis=symbol_map or _safe_dict(parsed.get("symbol_analysis")),
-        confidence=_safe_scalar(parsed.get("confidence", market_phase.get("confidence", "low"))),
+        confidence=_safe_scalar(confidence),
         risk_level=_safe_scalar(parsed.get("risk_level", scores.get("risk_level", ""))),
         validation=_safe_dict(parsed.get("validation")),
         raw=parsed,
