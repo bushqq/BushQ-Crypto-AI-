@@ -456,6 +456,8 @@ class MainWindow(QMainWindow):
         status_layout.setSpacing(12)
         self.status_label = QLabel("就绪")
         self.status_label.setObjectName("statusBadge")
+        self.ai_mode_label = QLabel("AI：-")
+        self.ai_mode_label.setObjectName("mutedLabel")
         self.last_run_label = QLabel("上次运行：-")
         self.last_run_label.setObjectName("mutedLabel")
         self.progress_bar = QProgressBar()
@@ -467,6 +469,7 @@ class MainWindow(QMainWindow):
         self.auto_push_checkbox.stateChanged.connect(self.on_auto_push_changed)
         status_layout.addWidget(self.status_label)
         status_layout.addWidget(self.progress_bar)
+        status_layout.addWidget(self.ai_mode_label)
         status_layout.addStretch()
         status_layout.addWidget(self.last_run_label)
         status_layout.addWidget(self.auto_push_checkbox)
@@ -774,6 +777,7 @@ class MainWindow(QMainWindow):
         self.news_total.setValue(int(cfg.get("news", {}).get("total_limit", 80)))
         self.symbols.setText(", ".join(cfg.get("symbols", [])))
         self.auto_push_checkbox.setChecked(bool(cfg.get("scheduler", {}).get("auto_push_enabled", False)))
+        self.update_ai_mode_label()
         prompt_path = PROJECT_ROOT / cfg.get("ai", {}).get("prompt_template", "templates/prompts/daily_analysis.md")
         if prompt_path.exists():
             self.prompt_edit.setPlainText(prompt_path.read_text(encoding="utf-8"))
@@ -798,7 +802,16 @@ class MainWindow(QMainWindow):
         prompt_path = PROJECT_ROOT / cfg.get("ai", {}).get("prompt_template", "templates/prompts/daily_analysis.md")
         prompt_path.parent.mkdir(parents=True, exist_ok=True)
         prompt_path.write_text(self.prompt_edit.toPlainText(), encoding="utf-8")
+        self.update_ai_mode_label()
         QMessageBox.information(self, "设置", "保存成功")
+
+    def update_ai_mode_label(self) -> None:
+        cfg = load_yaml_config()
+        env = load_env()
+        model = env.get("DEEPSEEK_MODEL") or cfg.get("ai", {}).get("model", "-")
+        thinking = str(cfg.get("ai", {}).get("thinking_mode", "disabled")).lower()
+        mode = "深度思考模式" if thinking == "enabled" else "稳定 JSON 模式"
+        self.ai_mode_label.setText(f"AI：{model} · {mode}")
 
     def on_auto_push_changed(self, *_args) -> None:
         cfg = load_yaml_config()
