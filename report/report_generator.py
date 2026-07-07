@@ -261,7 +261,7 @@ class ReportGenerator:
 
         # AI 综合分析
         if ai and _is_v31(ai):
-            sections.extend(_render_v31_details(ai))
+            sections.extend(_render_v31_details(ai, context))
         elif ai:
             phase_cn = PHASE_MAP.get(_safe_text(ai.market_phase), _cn_value(ai.market_phase))
             sections.append("## AI 综合分析")
@@ -444,7 +444,7 @@ class ReportGenerator:
             fg_cn = FG_CLASSIFICATION_MAP.get(context.fear_greed.classification, context.fear_greed.classification)
             lines.append(f"情绪指数: {context.fear_greed.value}({fg_cn})")
 
-        symbol_lines = _brief_symbol_analysis_lines(ai)
+        symbol_lines = _brief_symbol_analysis_lines(ai, context)
         if symbol_lines:
             lines.append("")
             lines.append("**币种简析**")
@@ -507,11 +507,11 @@ def _ai_model_line(context: MarketContext) -> str:
     return f"*AI 分析模型: {model}（{mode_cn}）*"
 
 
-def _brief_symbol_analysis_lines(ai: Optional[AIAnalysis]) -> list:
+def _brief_symbol_analysis_lines(ai: Optional[AIAnalysis], context: Optional[MarketContext] = None) -> list:
     if not ai or not _is_v31(ai):
         return []
     lines = []
-    symbols = [item for item in _safe_list(ai.raw.get("symbols")) if isinstance(item, dict) and _safe_text(item.get("symbol"))]
+    symbols = _v31_symbols(ai, context)
     for item in symbols[:5]:
         symbol = _display_symbol(_safe_text(item.get("symbol")))
         state = _cn_value(item.get("state")) or "-"
@@ -570,7 +570,7 @@ def _render_v31_summary(ai: AIAnalysis, context: Optional[MarketContext] = None)
     sections.append("- 操作解读: 仅作市场研究参考，不构成投资建议。")
     sections.append(f"- 核心依据: {_safe_text(phase.get('reason')) or '当前数据不足以支持该结论。'}")
 
-    symbols = [item for item in _safe_list(raw.get("symbols")) if isinstance(item, dict) and _safe_text(item.get("symbol"))]
+    symbols = _v31_symbols(ai, context)
     if symbols:
         sections.extend(["", "## 关键价位", ""])
         for item in symbols:
@@ -603,7 +603,7 @@ def _render_v31_summary(ai: AIAnalysis, context: Optional[MarketContext] = None)
     return sections
 
 
-def _render_v31_details(ai: AIAnalysis) -> list:
+def _render_v31_details(ai: AIAnalysis, context: Optional[MarketContext] = None) -> list:
     raw = ai.raw
     scores = _safe_dict(raw.get("scores"))
     sections = ["## 详细分析", ""]
@@ -654,7 +654,7 @@ def _render_v31_details(ai: AIAnalysis) -> list:
             sections.append(f"- {_format_event(item)}")
         sections.append("")
 
-    symbols = [item for item in _safe_list(raw.get("symbols")) if isinstance(item, dict) and _safe_text(item.get("symbol"))]
+    symbols = _v31_symbols(ai, context)
     if symbols:
         sections.append("### 币种分析")
         for item in symbols:
@@ -707,6 +707,53 @@ def _safe_list(value) -> list:
     if value in (None, ""):
         return []
     return [value]
+
+
+def _v31_symbols(ai: AIAnalysis, context: Optional[MarketContext] = None) -> list:
+    symbols = [
+        item
+        for item in _safe_list(ai.raw.get("symbols"))
+        if isinstance(item, dict) and _safe_text(item.get("symbol"))
+    ]
+    if symbols or not context:
+        return symbols
+    return _fallback_symbol_items(context)
+
+
+def _fallback_symbol_items(context: MarketContext) -> list:
+    items = []
+    for symbol in context.tickers.keys():
+        support, resistance = _fallback_levels(symbol, context)
+        tech = _preferred_technical(symbol, context)
+        ticker = context.tickers.get(symbol)
+        scenario = {
+            "if_breakout": f"若放量突破 {_format_levels(resistance)}，再观察能否站稳压力上方。" if resistance else "",
+            "if_breakdown": f"若跌破 {_format_levels(support)}，当前观察假设转弱。" if support else "",
+        }
+        risk_parts = []
+        if ticker and ticker.funding_rate is not None:
+            risk_parts.append(f"资金费率 {ticker.funding_rate:.6f}")
+        if ticker and ticker.open_interest is not None:
+            risk_parts.append(f"持仓量 {ticker.open_interest}")
+        items.append(
+            {
+                "symbol": symbol,
+                "state": getattr(tech, "trend", "") or "无法判断",
+                "technical_summary": getattr(tech, "summary", "") or "AI 未返回币种分析，已使用系统技术指标兜底。",
+                "risk": "；".join(risk_parts) or "当前衍生品风险数据不足。",
+                "support": support,
+                "resistance": resistance,
+                "entry_zone": _fallback_entry_zone(symbol, context),
+                "scenario": scenario,
+                "evidence": "AI 未返回 symbols 字段；本段根据 K 线技术指标、24h 高低点、资金费率和持仓量生成。",
+            }
+        )
+    return items
+
+
+def _preferred_technical(symbol: str, context: MarketContext):
+    tf_map = context.tech_analyses.get(symbol, {}) if context else {}
+    return tf_map.get("4h") or tf_map.get("1d")
 
 
 def _is_insufficient_text(value: str) -> bool:
