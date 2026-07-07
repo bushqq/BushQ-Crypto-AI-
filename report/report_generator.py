@@ -400,6 +400,7 @@ class ReportGenerator:
 
         # 免责声明
         sections.append("---")
+        sections.append(_ai_model_line(context))
         sections.append("*本报告由 BushQ Crypto AI 自动生成，仅供参考，不构成投资建议。*")
 
         # 拼接
@@ -472,6 +473,7 @@ class ReportGenerator:
                 lines.append("风险: " + "; ".join(_format_event(x) for x in ai.risk_alerts[:3]))
 
         lines.append("")
+        lines.append(_ai_model_line(context))
         lines.append("*仅供参考，不构成投资建议*")
         return "\n".join(lines)
 
@@ -490,6 +492,13 @@ def _display_symbol(symbol: str) -> str:
     if symbol.endswith("-USDT-SWAP"):
         return symbol.replace("-USDT-SWAP", "")
     return symbol.replace("/USDT", "")
+
+
+def _ai_model_line(context: MarketContext) -> str:
+    model = _safe_text(getattr(context, "ai_model", "")) or "-"
+    thinking = _safe_text(getattr(context, "ai_thinking_mode", "")) or "disabled"
+    mode_cn = "深度思考模式" if thinking.lower() == "enabled" else "稳定 JSON 模式"
+    return f"*AI 分析模型: {model}（{mode_cn}）*"
 
 
 def extract_report_summary_lines(content: str, max_lines: int = 12) -> list:

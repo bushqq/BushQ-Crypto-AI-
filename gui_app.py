@@ -560,6 +560,7 @@ class MainWindow(QMainWindow):
         for field in [self.deepseek_key, self.tavily_key, self.wechat_webhook]:
             field.setEchoMode(QLineEdit.Password)
         self.deepseek_model = QLineEdit()
+        self.deep_thinking_checkbox = QCheckBox("深度思考模式（仅本地手动分析）")
         self.proxy = QLineEdit()
         self.news_total = QSpinBox()
         self.news_total.setRange(20, 200)
@@ -568,6 +569,7 @@ class MainWindow(QMainWindow):
         form.addRow("Tavily Key", self.tavily_key)
         form.addRow("企业微信 Webhook", self.wechat_webhook)
         form.addRow("DeepSeek 模型", self.deepseek_model)
+        form.addRow("AI 模式", self.deep_thinking_checkbox)
         form.addRow("代理地址", self.proxy)
         form.addRow("新闻总量", self.news_total)
         form.addRow("币种列表", self.symbols)
@@ -767,6 +769,7 @@ class MainWindow(QMainWindow):
         self.tavily_key.setText(env.get("TAVILY_API_KEY", ""))
         self.wechat_webhook.setText(env.get("WECHAT_WORK_WEBHOOK_URL", ""))
         self.deepseek_model.setText(env.get("DEEPSEEK_MODEL", cfg.get("ai", {}).get("model", "deepseek-v4-pro")))
+        self.deep_thinking_checkbox.setChecked(str(cfg.get("ai", {}).get("thinking_mode", "disabled")).lower() == "enabled")
         self.proxy.setText(cfg.get("exchange", {}).get("proxy", ""))
         self.news_total.setValue(int(cfg.get("news", {}).get("total_limit", 80)))
         self.symbols.setText(", ".join(cfg.get("symbols", [])))
@@ -786,6 +789,7 @@ class MainWindow(QMainWindow):
 
         cfg = load_yaml_config()
         cfg.setdefault("exchange", {})["proxy"] = self.proxy.text().strip()
+        cfg.setdefault("ai", {})["thinking_mode"] = "enabled" if self.deep_thinking_checkbox.isChecked() else "disabled"
         cfg.setdefault("news", {})["total_limit"] = int(self.news_total.value())
         cfg["symbols"] = [s.strip() for s in self.symbols.text().split(",") if s.strip()]
         cfg.setdefault("scheduler", {})["auto_push_enabled"] = self.auto_push_checkbox.isChecked()

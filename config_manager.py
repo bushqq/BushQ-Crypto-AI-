@@ -91,6 +91,7 @@ class Config:
             "news.api_key": "TAVILY_API_KEY",
             "ai.api_key": "DEEPSEEK_API_KEY",
             "ai.model": "DEEPSEEK_MODEL",
+            "ai.thinking_mode": "DEEPSEEK_THINKING_MODE",
             "notification.webhook_url": "WECHAT_WORK_WEBHOOK_URL",
         }
         for path, env_key in env_overrides.items():

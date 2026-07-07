@@ -32,6 +32,7 @@ class DeepSeekAnalyzer:
         self._temperature: float = 0.3
         self._timeout: int = 120
         self._system_prompt: str = SYSTEM_PROMPT
+        self._thinking_mode: str = "disabled"
 
     def initialize(self, config: Any) -> None:
         """初始化 DeepSeek 客户端"""
@@ -41,6 +42,7 @@ class DeepSeekAnalyzer:
         self._max_tokens = config.get("ai.max_tokens", 4096)
         self._temperature = config.get("ai.temperature", 0.3)
         self._timeout = config.get("ai.timeout", 120)
+        self._thinking_mode = str(config.get("ai.thinking_mode", "disabled") or "disabled").lower()
         self._system_prompt = self._load_prompt_template(config.get("ai.prompt_template", ""))
 
         if not api_key:
@@ -52,7 +54,7 @@ class DeepSeekAnalyzer:
             base_url=base_url,
             timeout=self._timeout,
         )
-        logger.info("[DeepSeek] 初始化成功 (model=%s)", self._model)
+        logger.info("[DeepSeek] 初始化成功 (model=%s, thinking=%s)", self._model, self._thinking_mode)
 
     def analyze(self, context: MarketContext) -> Optional[AIAnalysis]:
         """
@@ -124,6 +126,8 @@ class DeepSeekAnalyzer:
         }
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
+        if self._model.startswith("deepseek-v4"):
+            kwargs["extra_body"] = {"thinking": {"type": self._thinking_mode}}
 
         response = self._client.chat.completions.create(**kwargs)
         choice = response.choices[0]

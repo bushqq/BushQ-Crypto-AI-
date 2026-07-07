@@ -70,6 +70,7 @@ ai:
   api_key: "${DEEPSEEK_API_KEY}"
   base_url: "https://api.deepseek.com"
   model: "${DEEPSEEK_MODEL}"
+  thinking_mode: "disabled"
   prompt_template: "templates/prompts/daily_analysis.md"
   max_tokens: 8192
   temperature: 0.3

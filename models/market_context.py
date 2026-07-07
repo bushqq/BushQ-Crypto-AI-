@@ -38,4 +38,6 @@ class MarketContext:
     # 元信息
     run_id: str = ""
     run_time: str = ""
+    ai_model: str = ""
+    ai_thinking_mode: str = ""
     errors: List[str] = field(default_factory=list)

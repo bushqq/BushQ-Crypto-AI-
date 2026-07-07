@@ -85,7 +85,12 @@ class Pipeline:
         start_time = time.time()
         logger.info("========== Pipeline 开始 [run_id=%s] ==========", run_id)
 
-        context = MarketContext(run_id=run_id, run_time=datetime.now().isoformat())
+        context = MarketContext(
+            run_id=run_id,
+            run_time=datetime.now().isoformat(),
+            ai_model=self._config.get("ai.model", "") if self._config else "",
+            ai_thinking_mode=self._config.get("ai.thinking_mode", "disabled") if self._config else "disabled",
+        )
 
         try:
             # 1. 数据采集
