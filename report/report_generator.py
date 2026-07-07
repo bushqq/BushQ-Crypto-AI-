@@ -444,6 +444,12 @@ class ReportGenerator:
             fg_cn = FG_CLASSIFICATION_MAP.get(context.fear_greed.classification, context.fear_greed.classification)
             lines.append(f"情绪指数: {context.fear_greed.value}({fg_cn})")
 
+        symbol_lines = _brief_symbol_analysis_lines(ai)
+        if symbol_lines:
+            lines.append("")
+            lines.append("**币种简析**")
+            lines.extend(symbol_lines)
+
         # AI 总结
         if ai and not conclusion_lines:
             if _is_v31(ai):
@@ -499,6 +505,21 @@ def _ai_model_line(context: MarketContext) -> str:
     thinking = _safe_text(getattr(context, "ai_thinking_mode", "")) or "disabled"
     mode_cn = "深度思考模式" if thinking.lower() == "enabled" else "稳定 JSON 模式"
     return f"*AI 分析模型: {model}（{mode_cn}）*"
+
+
+def _brief_symbol_analysis_lines(ai: Optional[AIAnalysis]) -> list:
+    if not ai or not _is_v31(ai):
+        return []
+    lines = []
+    symbols = [item for item in _safe_list(ai.raw.get("symbols")) if isinstance(item, dict) and _safe_text(item.get("symbol"))]
+    for item in symbols[:5]:
+        symbol = _display_symbol(_safe_text(item.get("symbol")))
+        state = _cn_value(item.get("state")) or "-"
+        support = _format_levels(item.get("support")) or "-"
+        resistance = _format_levels(item.get("resistance")) or "-"
+        entry_zone = _format_entry_zone(_safe_dict(item.get("entry_zone"))) or "-"
+        lines.append(f"- {symbol}: {state}；支撑 {support}；压力 {resistance}；观察 {entry_zone}")
+    return lines
 
 
 def extract_report_summary_lines(content: str, max_lines: int = 12) -> list:
