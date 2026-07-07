@@ -392,6 +392,7 @@ class MainWindow(QMainWindow):
         self.active_thread: Optional[QThread] = None
         self.active_worker: Optional[TaskWorker] = None
         self.auto_runs: Dict[str, str] = {}
+        self._loading_settings = False
         self._apply_theme()
 
         setup_logger("cic", "INFO", str(PROJECT_ROOT / "logs"))
@@ -591,6 +592,7 @@ class MainWindow(QMainWindow):
         reveal = QCheckBox("显示密钥")
         save.clicked.connect(self.save_settings)
         reveal.stateChanged.connect(self.toggle_secret_visibility)
+        self.deep_thinking_checkbox.stateChanged.connect(self.on_deep_thinking_changed)
         buttons.addWidget(save)
         buttons.addWidget(reveal)
         buttons.addStretch()
@@ -766,6 +768,7 @@ class MainWindow(QMainWindow):
             field.setEchoMode(mode)
 
     def load_settings_into_form(self) -> None:
+        self._loading_settings = True
         env = load_env()
         cfg = load_yaml_config()
         self.deepseek_key.setText(env.get("DEEPSEEK_API_KEY", ""))
@@ -781,6 +784,7 @@ class MainWindow(QMainWindow):
         prompt_path = PROJECT_ROOT / cfg.get("ai", {}).get("prompt_template", "templates/prompts/daily_analysis.md")
         if prompt_path.exists():
             self.prompt_edit.setPlainText(prompt_path.read_text(encoding="utf-8"))
+        self._loading_settings = False
 
     def save_settings(self) -> None:
         env = load_env()
@@ -817,6 +821,14 @@ class MainWindow(QMainWindow):
         cfg = load_yaml_config()
         cfg.setdefault("scheduler", {})["auto_push_enabled"] = self.auto_push_checkbox.isChecked()
         save_yaml_config(cfg)
+
+    def on_deep_thinking_changed(self, *_args) -> None:
+        if self._loading_settings:
+            return
+        cfg = load_yaml_config()
+        cfg.setdefault("ai", {})["thinking_mode"] = "enabled" if self.deep_thinking_checkbox.isChecked() else "disabled"
+        save_yaml_config(cfg)
+        self.update_ai_mode_label()
 
     def check_auto_push(self) -> None:
         if not self.auto_push_checkbox.isChecked():
