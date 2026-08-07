@@ -3,20 +3,23 @@
 
 import logging
 import os
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import yaml
-from PySide6.QtCore import QObject, QThread, QTimer, Qt, Signal, Slot
+from PySide6.QtCore import QEvent, QObject, QThread, QTimer, Qt, Signal, Slot
 from PySide6.QtGui import QAction, QFont, QIcon
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
+    QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
     QFrame,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -26,6 +29,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QPlainTextEdit,
     QSpinBox,
     QTabWidget,
@@ -99,6 +103,12 @@ QTabBar::tab:hover {
     color: #F8FAFC;
     background: #111C30;
 }
+QScrollArea,
+QScrollArea QWidget#qt_scrollarea_viewport,
+QWidget#settingsContent {
+    background: #0F172A;
+    border: none;
+}
 QGroupBox {
     background: #111827;
     border: 1px solid #243044;
@@ -138,6 +148,11 @@ QLabel#statusBadge {
 }
 QLabel#mutedLabel {
     color: #94A3B8;
+}
+QLabel#settingsSectionLabel {
+    color: #CBD5E1;
+    font-weight: 600;
+    padding-top: 2px;
 }
 QPushButton {
     background: #172033;
@@ -207,7 +222,8 @@ QPlainTextEdit,
 QListWidget,
 QTableWidget,
 QLineEdit,
-QSpinBox {
+QSpinBox,
+QDoubleSpinBox {
     background: #0B1020;
     color: #E5E7EB;
     border: 1px solid #243044;
@@ -222,6 +238,7 @@ QPlainTextEdit {
 }
 QLineEdit:focus,
 QSpinBox:focus,
+QDoubleSpinBox:focus,
 QPlainTextEdit:focus,
 QListWidget:focus,
 QTableWidget:focus {
@@ -353,6 +370,7 @@ def run_pipeline(send: bool, send_mode: str = "config") -> Dict[str, Any]:
             "report": context.report_markdown,
             "brief": context.report_brief,
             "news": context.news.items if context.news else [],
+            "trade_plans": list(context.trade_plans.values()),
             "errors": context.errors,
         }
     finally:
@@ -381,6 +399,8 @@ def run_health_check() -> Dict[str, bool]:
 
 
 class MainWindow(QMainWindow):
+    SETTINGS_BREAKPOINT = 900
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("BushQ Crypto AI")
@@ -388,7 +408,7 @@ class MainWindow(QMainWindow):
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
         self.resize(1180, 780)
-        self.setMinimumSize(1020, 680)
+        self.setMinimumSize(720, 560)
         self.active_thread: Optional[QThread] = None
         self.active_worker: Optional[TaskWorker] = None
         self.auto_runs: Dict[str, str] = {}
@@ -404,6 +424,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.tabs)
         self._build_dashboard_tab()
         self._build_report_tab()
+        self._build_trade_plan_tab()
         self._build_news_tab()
         self._build_settings_tab()
         self._build_menu()
@@ -550,54 +571,218 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.news_table)
         self.tabs.addTab(tab, "新闻")
 
-    def _build_settings_tab(self) -> None:
+    def _build_trade_plan_tab(self) -> None:
         tab = QWidget()
+        self.trade_plan_tab = tab
         layout = QVBoxLayout(tab)
         layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(14)
+        layout.setSpacing(12)
+        self.trade_plan_table = QTableWidget(0, 11)
+        self.trade_plan_table.setHorizontalHeaderLabels(
+            ["标的", "结论", "入场区间", "参考入场", "止损", "失效 / 强平", "TP1", "TP2", "TP3", "仓位 / 杠杆", "净盈亏比"]
+        )
+        self.trade_plan_table.horizontalHeader().setStretchLastSection(True)
+        self.trade_plan_table.setColumnWidth(0, 145)
+        self.trade_plan_table.setColumnWidth(1, 85)
+        self.trade_plan_table.setColumnWidth(2, 150)
+        for column in range(3, 9):
+            self.trade_plan_table.setColumnWidth(column, 95)
+        self.trade_plan_table.setColumnWidth(5, 145)
+        self.trade_plan_table.setColumnWidth(9, 150)
+        layout.addWidget(self.trade_plan_table)
+        self.tabs.addTab(tab, "交易计划")
 
-        form_box = QGroupBox("配置")
-        form = QFormLayout(form_box)
+    def _build_settings_tab(self) -> None:
+        tab = QWidget()
+        self.settings_tab = tab
+        tab_layout = QVBoxLayout(tab)
+        tab_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.settings_scroll = QScrollArea()
+        self.settings_scroll.setObjectName("settingsScrollArea")
+        self.settings_scroll.setWidgetResizable(True)
+        self.settings_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.settings_scroll.setFrameShape(QFrame.NoFrame)
+        self.settings_scroll.viewport().installEventFilter(self)
+
+        settings_content = QWidget()
+        settings_content.setObjectName("settingsContent")
+        content_layout = QVBoxLayout(settings_content)
+        content_layout.setContentsMargins(20, 18, 20, 24)
+        content_layout.setSpacing(16)
+        self.settings_grid = QGridLayout()
+        self.settings_grid.setContentsMargins(0, 0, 0, 0)
+        self.settings_grid.setHorizontalSpacing(16)
+        self.settings_grid.setVerticalSpacing(16)
+
+        self.interface_settings_group = QGroupBox("接口配置")
+        self.interface_settings_group.setObjectName("interfaceSettingsGroup")
+        interface_form = QFormLayout(self.interface_settings_group)
+        self._configure_settings_form(interface_form)
         self.deepseek_key = QLineEdit()
         self.tavily_key = QLineEdit()
         self.wechat_webhook = QLineEdit()
         for field in [self.deepseek_key, self.tavily_key, self.wechat_webhook]:
             field.setEchoMode(QLineEdit.Password)
         self.deepseek_model = QLineEdit()
-        self.deep_thinking_checkbox = QCheckBox("深度思考模式（仅本地手动分析）")
         self.proxy = QLineEdit()
+        for field in [self.deepseek_key, self.tavily_key, self.wechat_webhook, self.deepseek_model, self.proxy]:
+            self._configure_text_input(field)
+        self.secret_toggle_button = QPushButton("显示密钥")
+        self.secret_toggle_button.setCheckable(True)
+        self.secret_toggle_button.setMinimumHeight(36)
+        self.secret_toggle_button.setMaximumWidth(112)
+        self.secret_toggle_button.toggled.connect(self.toggle_secret_visibility)
+        self._add_settings_row(interface_form, "DeepSeek Key", self.deepseek_key)
+        self._add_settings_row(interface_form, "Tavily Key", self.tavily_key)
+        self._add_settings_row(interface_form, "企业微信 Webhook", self.wechat_webhook)
+        self._add_settings_row(interface_form, "DeepSeek 模型", self.deepseek_model)
+        self._add_settings_row(interface_form, "代理地址", self.proxy)
+        self._add_settings_row(interface_form, "", self.secret_toggle_button)
+
+        self.analysis_settings_group = QGroupBox("分析设置")
+        self.analysis_settings_group.setObjectName("analysisSettingsGroup")
+        analysis_layout = QVBoxLayout(self.analysis_settings_group)
+        analysis_layout.setContentsMargins(14, 18, 14, 14)
+        analysis_layout.setSpacing(12)
+        analysis_form = QFormLayout()
+        self._configure_settings_form(analysis_form)
+        self.deep_thinking_checkbox = QCheckBox("深度思考模式（仅本地手动分析）")
         self.news_total = QSpinBox()
         self.news_total.setRange(20, 200)
-        self.symbols = QLineEdit()
-        form.addRow("DeepSeek Key", self.deepseek_key)
-        form.addRow("Tavily Key", self.tavily_key)
-        form.addRow("企业微信 Webhook", self.wechat_webhook)
-        form.addRow("DeepSeek 模型", self.deepseek_model)
-        form.addRow("AI 模式", self.deep_thinking_checkbox)
-        form.addRow("代理地址", self.proxy)
-        form.addRow("新闻总量", self.news_total)
-        form.addRow("币种列表", self.symbols)
-        layout.addWidget(form_box)
-
-        prompt_box = QGroupBox("AI Prompt")
-        prompt_layout = QVBoxLayout(prompt_box)
+        self.news_total.setSingleStep(10)
+        self.news_total.setSuffix(" 条")
+        self.symbols = QPlainTextEdit()
+        self.symbols.setPlaceholderText("每行一个，例如 BTC-USDT-SWAP")
+        self.symbols.setMinimumHeight(96)
+        self.symbols.setMaximumHeight(128)
+        self._configure_numeric_input(self.news_total)
+        self._add_settings_row(analysis_form, "AI 模式", self.deep_thinking_checkbox)
+        self._add_settings_row(analysis_form, "新闻总量", self.news_total)
+        self._add_settings_row(analysis_form, "币种列表", self.symbols)
+        analysis_layout.addLayout(analysis_form)
+        prompt_label = QLabel("分析提示词")
+        prompt_label.setObjectName("settingsSectionLabel")
         self.prompt_edit = QPlainTextEdit()
-        self.prompt_edit.setMinimumHeight(220)
-        prompt_layout.addWidget(self.prompt_edit)
-        layout.addWidget(prompt_box, 1)
+        self.prompt_edit.setMinimumHeight(180)
+        analysis_layout.addWidget(prompt_label)
+        analysis_layout.addWidget(self.prompt_edit)
+
+        self.risk_settings_group = QGroupBox("交易风控")
+        self.risk_settings_group.setObjectName("riskSettingsGroup")
+        risk_form = QFormLayout(self.risk_settings_group)
+        self._configure_settings_form(risk_form)
+        self.trade_plan_enabled = QCheckBox("生成研究型交易计划")
+        self.risk_capital = QDoubleSpinBox()
+        self.risk_capital.setRange(100, 100_000_000)
+        self.risk_capital.setDecimals(2)
+        self.risk_capital.setSingleStep(100)
+        self.risk_capital.setSuffix(" USDT")
+        self.risk_per_trade = QDoubleSpinBox()
+        self.risk_per_trade.setRange(0.01, 10)
+        self.risk_per_trade.setDecimals(2)
+        self.risk_per_trade.setSingleStep(0.1)
+        self.risk_per_trade.setSuffix(" %")
+        self.margin_budget = QDoubleSpinBox()
+        self.margin_budget.setRange(0.1, 100)
+        self.margin_budget.setDecimals(1)
+        self.margin_budget.setSingleStep(1)
+        self.margin_budget.setSuffix(" %")
+        self.max_leverage = QSpinBox()
+        self.max_leverage.setRange(1, 20)
+        self.max_leverage.setSingleStep(1)
+        self.max_leverage.setSuffix(" 倍")
+        self.min_reward_risk = QDoubleSpinBox()
+        self.min_reward_risk.setRange(1.0, 10.0)
+        self.min_reward_risk.setDecimals(2)
+        self.min_reward_risk.setSingleStep(0.1)
+        self.min_reward_risk.setSuffix(" : 1")
+        for field in [self.risk_capital, self.risk_per_trade, self.margin_budget, self.max_leverage, self.min_reward_risk]:
+            self._configure_numeric_input(field)
+        self._add_settings_row(risk_form, "启用交易计划", self.trade_plan_enabled)
+        self._add_settings_row(risk_form, "风险本金", self.risk_capital)
+        self._add_settings_row(risk_form, "单笔风险上限", self.risk_per_trade)
+        self._add_settings_row(risk_form, "保证金预算", self.margin_budget)
+        self._add_settings_row(risk_form, "杠杆上限", self.max_leverage)
+        self._add_settings_row(risk_form, "最低净盈亏比", self.min_reward_risk)
+
+        content_layout.addLayout(self.settings_grid)
 
         buttons = QHBoxLayout()
-        save = QPushButton("保存设置")
-        save.setProperty("variant", "primary")
-        reveal = QCheckBox("显示密钥")
-        save.clicked.connect(self.save_settings)
-        reveal.stateChanged.connect(self.toggle_secret_visibility)
+        buttons.setSpacing(10)
+        self.save_settings_button = QPushButton("保存设置")
+        self.save_settings_button.setProperty("variant", "primary")
+        self.save_settings_button.setMinimumHeight(42)
+        self.save_settings_button.clicked.connect(self.save_settings)
         self.deep_thinking_checkbox.stateChanged.connect(self.on_deep_thinking_changed)
-        buttons.addWidget(save)
-        buttons.addWidget(reveal)
+        buttons.addWidget(self.save_settings_button)
         buttons.addStretch()
-        layout.addLayout(buttons)
+        content_layout.addLayout(buttons)
+        content_layout.addStretch()
+
+        self.settings_scroll.setWidget(settings_content)
+        tab_layout.addWidget(self.settings_scroll)
+        self._settings_layout_mode = ""
+        self._update_settings_layout(force=True)
         self.tabs.addTab(tab, "设置")
+
+    @staticmethod
+    def _configure_settings_form(form: QFormLayout) -> None:
+        form.setContentsMargins(14, 18, 14, 14)
+        form.setHorizontalSpacing(14)
+        form.setVerticalSpacing(12)
+        form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        form.setFormAlignment(Qt.AlignTop)
+        form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+        form.setRowWrapPolicy(QFormLayout.DontWrapRows)
+
+    @staticmethod
+    def _add_settings_row(form: QFormLayout, text: str, field: QWidget) -> None:
+        label = QLabel(text)
+        label.setFixedWidth(126)
+        label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        form.addRow(label, field)
+
+    @staticmethod
+    def _configure_text_input(field: QLineEdit) -> None:
+        field.setMinimumHeight(40)
+        field.setMaximumWidth(520)
+
+    @staticmethod
+    def _configure_numeric_input(field: QWidget) -> None:
+        field.setMinimumHeight(40)
+        field.setMaximumWidth(240)
+
+    @property
+    def settings_layout_mode(self) -> str:
+        return self._settings_layout_mode
+
+    def _update_settings_layout(self, force: bool = False) -> None:
+        if not hasattr(self, "settings_scroll"):
+            return
+        mode = "double" if self.settings_scroll.viewport().width() >= self.SETTINGS_BREAKPOINT else "single"
+        if not force and mode == self._settings_layout_mode:
+            return
+        for group in [self.interface_settings_group, self.analysis_settings_group, self.risk_settings_group]:
+            self.settings_grid.removeWidget(group)
+        if mode == "double":
+            self.settings_grid.addWidget(self.interface_settings_group, 0, 0, Qt.AlignTop)
+            self.settings_grid.addWidget(self.analysis_settings_group, 0, 1, Qt.AlignTop)
+            self.settings_grid.addWidget(self.risk_settings_group, 1, 0, 1, 2, Qt.AlignTop)
+            self.settings_grid.setColumnStretch(0, 1)
+            self.settings_grid.setColumnStretch(1, 1)
+        else:
+            self.settings_grid.addWidget(self.interface_settings_group, 0, 0)
+            self.settings_grid.addWidget(self.analysis_settings_group, 1, 0)
+            self.settings_grid.addWidget(self.risk_settings_group, 2, 0)
+            self.settings_grid.setColumnStretch(0, 1)
+            self.settings_grid.setColumnStretch(1, 0)
+        self._settings_layout_mode = mode
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if hasattr(self, "settings_scroll") and watched is self.settings_scroll.viewport() and event.type() == QEvent.Resize:
+            QTimer.singleShot(0, self._update_settings_layout)
+        return super().eventFilter(watched, event)
 
     def start_task(self, task: str) -> None:
         if self._task_is_running():
@@ -658,8 +843,9 @@ class MainWindow(QMainWindow):
         if task in {"analyze_send_summary", "analyze_send_full", "analyze_only"} and isinstance(result, dict):
             self.report_view.setPlainText(result.get("report", ""))
             self.populate_news(result.get("news", []))
+            self.populate_trade_plans(result.get("trade_plans", []))
             self.refresh_reports()
-            self.tabs.setCurrentIndex(1)
+            self.tabs.setCurrentWidget(self.trade_plan_tab)
         elif task in {"send_latest_summary", "send_latest_full"}:
             ok = bool(result.get("ok")) if isinstance(result, dict) else False
             self.append_log(f"{self._task_label(task)}：" + ("成功" if ok else "失败"))
@@ -739,6 +925,44 @@ class MainWindow(QMainWindow):
             self.news_table.setItem(row, 3, QTableWidgetItem(getattr(item, "url", "")))
         self.news_table.resizeColumnsToContents()
 
+    def populate_trade_plans(self, plans: List[Any]) -> None:
+        self.trade_plan_table.setRowCount(0)
+        for plan in plans:
+            row = self.trade_plan_table.rowCount()
+            self.trade_plan_table.insertRow(row)
+            targets = list(getattr(plan, "take_profits", []))
+            values = [
+                getattr(plan, "symbol", ""),
+                getattr(plan, "conclusion", ""),
+                self._plan_range(plan),
+                self._plan_price(getattr(plan, "reference_entry", None)),
+                self._plan_price(getattr(plan, "stop_loss", None)),
+                f"{self._plan_price(getattr(plan, 'chase_invalidation', None))} / {self._plan_price(getattr(plan, 'liquidation_price', None))}",
+                self._plan_price(getattr(targets[0], "price", None)) if len(targets) > 0 else "-",
+                self._plan_price(getattr(targets[1], "price", None)) if len(targets) > 1 else "-",
+                self._plan_price(getattr(targets[2], "price", None)) if len(targets) > 2 else "-",
+                f"{getattr(plan, 'notional_usdt', 0):.2f} USDT / {getattr(plan, 'leverage', 1)}x",
+                f"{getattr(plan, 'net_reward_risk', 0):.2f}",
+            ]
+            if getattr(plan, "conclusion", "") == "NO_TRADE":
+                values[2] = getattr(plan, "reason", "NO_TRADE")
+            for column, value in enumerate(values):
+                self.trade_plan_table.setItem(row, column, QTableWidgetItem(str(value)))
+
+    @staticmethod
+    def _plan_price(value: Optional[float]) -> str:
+        if value is None:
+            return "-"
+        if value >= 1000:
+            return f"{value:.1f}"
+        if value >= 1:
+            return f"{value:.2f}"
+        return f"{value:.6f}"
+
+    @classmethod
+    def _plan_range(cls, plan: Any) -> str:
+        return f"{cls._plan_price(getattr(plan, 'entry_low', None))} - {cls._plan_price(getattr(plan, 'entry_high', None))}"
+
     def refresh_reports(self) -> None:
         self.report_list.clear()
         report_dir = PROJECT_ROOT / "data" / "reports"
@@ -762,10 +986,11 @@ class MainWindow(QMainWindow):
         self.append_log(f"打开报告目录：{report_dir}")
         os.startfile(report_dir)
 
-    def toggle_secret_visibility(self, state: int) -> None:
-        mode = QLineEdit.Normal if state == Qt.Checked else QLineEdit.Password
+    def toggle_secret_visibility(self, visible: bool) -> None:
+        mode = QLineEdit.Normal if visible else QLineEdit.Password
         for field in [self.deepseek_key, self.tavily_key, self.wechat_webhook]:
             field.setEchoMode(mode)
+        self.secret_toggle_button.setText("隐藏密钥" if visible else "显示密钥")
 
     def load_settings_into_form(self) -> None:
         self._loading_settings = True
@@ -778,7 +1003,14 @@ class MainWindow(QMainWindow):
         self.deep_thinking_checkbox.setChecked(str(cfg.get("ai", {}).get("thinking_mode", "disabled")).lower() == "enabled")
         self.proxy.setText(cfg.get("exchange", {}).get("proxy", ""))
         self.news_total.setValue(int(cfg.get("news", {}).get("total_limit", 80)))
-        self.symbols.setText(", ".join(cfg.get("symbols", [])))
+        self.symbols.setPlainText("\n".join(cfg.get("symbols", [])))
+        trade_plan = cfg.get("trade_plan", {})
+        self.trade_plan_enabled.setChecked(bool(trade_plan.get("enabled", True)))
+        self.risk_capital.setValue(float(trade_plan.get("risk_capital_usdt", 1000)))
+        self.risk_per_trade.setValue(float(trade_plan.get("risk_per_trade_percent", 1.0)))
+        self.margin_budget.setValue(float(trade_plan.get("margin_budget_percent", 20.0)))
+        self.max_leverage.setValue(int(trade_plan.get("max_leverage", 3)))
+        self.min_reward_risk.setValue(float(trade_plan.get("min_reward_risk", 1.8)))
         self.auto_push_checkbox.setChecked(bool(cfg.get("scheduler", {}).get("auto_push_enabled", False)))
         self.update_ai_mode_label()
         prompt_path = PROJECT_ROOT / cfg.get("ai", {}).get("prompt_template", "templates/prompts/daily_analysis.md")
@@ -799,7 +1031,14 @@ class MainWindow(QMainWindow):
         cfg.setdefault("exchange", {})["proxy"] = self.proxy.text().strip()
         cfg.setdefault("ai", {})["thinking_mode"] = "enabled" if self.deep_thinking_checkbox.isChecked() else "disabled"
         cfg.setdefault("news", {})["total_limit"] = int(self.news_total.value())
-        cfg["symbols"] = [s.strip() for s in self.symbols.text().split(",") if s.strip()]
+        cfg["symbols"] = [s for s in re.split(r"[,，;；\s]+", self.symbols.toPlainText().strip()) if s]
+        trade_plan = cfg.setdefault("trade_plan", {})
+        trade_plan["enabled"] = self.trade_plan_enabled.isChecked()
+        trade_plan["risk_capital_usdt"] = float(self.risk_capital.value())
+        trade_plan["risk_per_trade_percent"] = float(self.risk_per_trade.value())
+        trade_plan["margin_budget_percent"] = float(self.margin_budget.value())
+        trade_plan["max_leverage"] = int(self.max_leverage.value())
+        trade_plan["min_reward_risk"] = float(self.min_reward_risk.value())
         cfg.setdefault("scheduler", {})["auto_push_enabled"] = self.auto_push_checkbox.isChecked()
         save_yaml_config(cfg)
 
