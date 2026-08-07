@@ -46,7 +46,13 @@ Evidence beats completeness. 缺数据可以接受，编造数据绝对禁止。
 - 核心展示字段禁止空字符串：market_phase.label、market_phase.confidence、market_phase.reason、scores.risk_level、position_guidance.overall.label、position_guidance.overall.suggested_band、position_guidance.overall.entry_condition、position_guidance.overall.invalidation 必须填写。
 - 如果证据不足，market_phase.label 填 Unknown，market_phase.confidence 填 low，scores.risk_level 填 Medium，position_guidance.overall.label 填 Watch Only，suggested_band 填 0%，条件和失效条件写“当前数据不足以支持该结论。”
 - symbols 数组必须为每个输入交易对输出一项。若技术数据存在，support/resistance 必须使用输入 technical 中的支撑位/压力位，不得留空；若缺失才写空数组。
+- symbols 必须完整覆盖 metadata.symbols 中的每个交易对，symbol 名称必须原样返回；禁止遗漏、缩写或只输出部分交易对。
 - symbols.entry_zone 是研究用观察区域，不是买入建议。必须基于输入 technical.support、technical.resistance、ATR/波动、24h high/low 或明确证据生成；不得凭空编造价格。
+- symbols.trade_conclusion 必须严格填写 LONG、SHORT 或 NO_TRADE。只有方向证据明确且可形成风控计划时填写 LONG/SHORT；震荡、证据不足或风险过高必须填写 NO_TRADE。
+- trade_conclusion 是研究型方向分类，不是下单建议。4h 与 1d 趋势同向、方向证据一致且没有 Critical 风险时，应在 LONG/SHORT 中选择对应方向，不要仅因一般性风险提示一律输出 NO_TRADE。
+- LONG：4h 与 1d 方向均偏多，且至少有趋势、MACD、价格结构中的两项多头证据一致。
+- SHORT：4h 与 1d 方向均偏空，且至少有趋势、MACD、价格结构中的两项空头证据一致。
+- NO_TRADE：多周期方向冲突、证据不足、数据过期、关键数据缺失或风险等级为 Critical。必须在 trade_reason 写明具体阻止条件，禁止使用“缺少 LONG/SHORT”作为显式 NO_TRADE 的理由。
 - entry_zone.near_support 优先填写靠近当前价格且有技术依据的支撑观察区；entry_zone.breakout_above 填需要突破确认的压力位；entry_zone.invalid_below 填观察假设失效位置。
 
 ## 允许值
@@ -338,6 +344,8 @@ data_gaps 可以写深度链上缺口，但不要说稳定币数据完全缺失�
     {
       "symbol": "",
       "state": "",
+      "trade_conclusion": "NO_TRADE",
+      "trade_reason": "",
       "support": [],
       "resistance": [],
       "technical_summary": "",

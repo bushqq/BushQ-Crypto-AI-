@@ -84,6 +84,20 @@ notification:
   msg_type: "markdown"
   summary_only: true
 
+# ==================== 交易计划（仅研究，不自动下单） ====================
+trade_plan:
+  enabled: true
+  risk_capital_usdt: 1000
+  risk_per_trade_percent: 1.0
+  margin_budget_percent: 20.0
+  max_leverage: 3
+  min_reward_risk: 1.8
+  fee_rate: 0.0005
+  slippage_rate: 0.0005
+  max_data_age_minutes: 30
+  maintenance_margin_rate: 0.005
+  liquidation_buffer_percent: 5.0
+
 # ==================== 宏观/市场结构/公开链上 ====================
 macro:
   enabled: true

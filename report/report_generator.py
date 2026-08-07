@@ -215,6 +215,10 @@ class ReportGenerator:
             sections.extend(_render_v31_summary(ai, context))
             sections.append("")
 
+        if context.trade_plans:
+            sections.extend(_render_trade_plans(context.trade_plans))
+            sections.append("")
+
         # 市场概览
         sections.append("## 市场概览")
         sections.append("")
@@ -450,6 +454,12 @@ class ReportGenerator:
             lines.append("**币种简析**")
             lines.extend(symbol_lines)
 
+        plan_lines = _brief_trade_plan_lines(context.trade_plans)
+        if plan_lines:
+            lines.append("")
+            lines.append("**交易计划**")
+            lines.extend(plan_lines)
+
         # AI 总结
         if ai and not conclusion_lines:
             if _is_v31(ai):
@@ -498,6 +508,22 @@ def _display_symbol(symbol: str) -> str:
     if symbol.endswith("-USDT-SWAP"):
         return symbol.replace("-USDT-SWAP", "")
     return symbol.replace("/USDT", "")
+
+
+def _brief_trade_plan_lines(plans: dict) -> list:
+    lines = []
+    active = [plan for plan in plans.values() if plan.conclusion != "NO_TRADE"]
+    if not active and plans:
+        return ["当前没有通过风控校验的交易计划（NO_TRADE）。"]
+    for plan in active:
+        targets = "/".join(_trade_price(target.price) for target in plan.take_profits)
+        lines.append(
+            f"- {plan.symbol} {plan.conclusion}: 入场 {_trade_price(plan.entry_low)}-"
+            f"{_trade_price(plan.entry_high)}；止损 {_trade_price(plan.stop_loss)}；"
+            f"追价失效 {_trade_price(plan.chase_invalidation)}；止盈 {targets}；"
+            f"{plan.leverage}x；净盈亏比 {plan.net_reward_risk:.2f}"
+        )
+    return lines
 
 
 def _ai_model_line(context: MarketContext) -> str:
@@ -601,6 +627,47 @@ def _render_v31_summary(ai: AIAnalysis, context: Optional[MarketContext] = None)
         for risk in risks[:5]:
             sections.append(f"- {_format_event(risk)}")
     return sections
+
+
+def _render_trade_plans(plans: dict) -> list:
+    sections = ["## 交易计划", ""]
+    for symbol, plan in plans.items():
+        sections.append(f"### {symbol} - {plan.conclusion}")
+        if plan.conclusion == "NO_TRADE":
+            sections.append(f"- 结论: NO_TRADE")
+            sections.append(f"- 原因: {plan.reason}")
+            sections.append("")
+            continue
+        targets = plan.take_profits
+        sections.append(f"- 入场区间: {_trade_price(plan.entry_low)} - {_trade_price(plan.entry_high)} USDT")
+        sections.append(f"- 参考入场价: {_trade_price(plan.reference_entry)} USDT")
+        sections.append(f"- 止损点位: {_trade_price(plan.stop_loss)} USDT")
+        sections.append(f"- 追价失效价: {_trade_price(plan.chase_invalidation)} USDT")
+        sections.append(f"- 预计强平价: {_trade_price(plan.liquidation_price)} USDT")
+        for index, target in enumerate(targets, 1):
+            sections.append(
+                f"- TP{index}: {_trade_price(target.price)} USDT（减仓 {target.close_percent}%）"
+            )
+        sections.append(
+            f"- 风险预算: {plan.risk_amount_usdt:.2f} USDT | "
+            f"名义仓位: {plan.notional_usdt:.2f} USDT | "
+            f"保证金: {plan.margin_usdt:.2f} USDT | 杠杆: {plan.leverage}x"
+        )
+        sections.append(f"- 净盈亏比: {plan.net_reward_risk:.2f} | 依据: {plan.reason}")
+        sections.append("")
+    return sections
+
+
+def _trade_price(value: Optional[float]) -> str:
+    if value is None:
+        return "-"
+    if value >= 1000:
+        return f"{value:.1f}"
+    if value >= 1:
+        return f"{value:.2f}"
+    if value >= 0.1:
+        return f"{value:.4f}"
+    return f"{value:.6f}"
 
 
 def _render_v31_details(ai: AIAnalysis, context: Optional[MarketContext] = None) -> list:

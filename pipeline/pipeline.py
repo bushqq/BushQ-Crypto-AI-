@@ -14,6 +14,7 @@ from analyzers.technical import TechnicalAnalyzer
 from ai.deepseek_analyzer import DeepSeekAnalyzer
 from report.report_generator import ReportGenerator, extract_report_summary_lines
 from notifier.wechat_work import WeChatWorkNotifier
+from risk.trade_plan import TradePlanEngine, TradePlanSettings
 from storage.database import Database
 from storage.repository import (
     MarketSnapshotRepo,
@@ -52,6 +53,7 @@ class Pipeline:
         self.ai_analyzer = DeepSeekAnalyzer()
         self.report_generator: Optional[ReportGenerator] = None
         self.notifier = WeChatWorkNotifier()
+        self.trade_plan_engine: Optional[TradePlanEngine] = None
         self.db: Optional[Database] = None
         self._config: Optional[Config] = None
 
@@ -76,6 +78,7 @@ class Pipeline:
 
         # 推送
         self.notifier.initialize(config)
+        self.trade_plan_engine = TradePlanEngine(TradePlanSettings.from_config(config))
 
         logger.info("Pipeline 初始化完成")
 
@@ -132,6 +135,9 @@ class Pipeline:
                 error_message = "AI 分析失败：DeepSeek 未返回可解析 JSON"
                 logger.error(error_message)
                 context.errors.append(error_message)
+
+            logger.info("[Step 4/7] 生成交易计划...")
+            context.trade_plans = self.trade_plan_engine.build(context) if self.trade_plan_engine else {}
 
             # 4. 生成报告
             logger.info("[Step 4/7] 生成报告...")

@@ -19,6 +19,9 @@ Analyze only the supplied input JSON. Do not predict prices, recommend trades, o
 If evidence is missing, output "当前数据不足以支持该结论。"
 Return one valid JSON object only. Do not output Markdown, comments, prose, or code fences.
 Every conclusion, score, risk alert, and symbol summary must include evidence.
+Return exactly one symbols item for every input symbol, using the unchanged symbol name.
+Each symbols item must contain trade_conclusion (LONG, SHORT, or NO_TRADE) and trade_reason.
+The response must end with validation.passed=true; incomplete symbol coverage is invalid.
 Use the V3.1 JSON contract: metadata, data_quality, market_phase, scores, macro, market_structure, capital_flow, onchain, sentiment, news_impact, risk_alerts, key_observations, follow_up, position_guidance, symbols, validation."""
 
 
@@ -100,6 +103,7 @@ class DeepSeekAnalyzer:
                     logger.warning("[DeepSeek] JSON 解析失败 (%s): %s", attempt["name"], parse_error)
                     repaired_content = self._repair_json_response(raw_content, parse_error)
                     parsed = _parse_json_object(repaired_content)
+                _validate_analysis_contract(parsed, context)
                 ai_result = _to_ai_analysis(parsed)
                 _apply_context_facts(ai_result, context)
                 logger.info("[DeepSeek] 分析完成: phase=%s confidence=%s", ai_result.market_phase, ai_result.confidence)
@@ -107,11 +111,11 @@ class DeepSeekAnalyzer:
             except json.JSONDecodeError as e:
                 logger.warning("[DeepSeek] JSON 修复后仍解析失败 (%s): %s", attempt["name"], e)
             except ValueError as e:
-                logger.warning("[DeepSeek] JSON 修复后仍无效 (%s): %s", attempt["name"], e)
+                logger.warning("[DeepSeek] AI 结果无效 (%s): %s", attempt["name"], e)
             except Exception as e:
                 logger.error("[DeepSeek] 分析失败 (%s): %s", attempt["name"], e)
 
-        logger.error("[DeepSeek] 两次尝试后仍未获得可解析 JSON")
+        logger.error("[DeepSeek] 三次尝试后仍未获得完整、可解析的 JSON")
         return None
 
     def _request_completion(self, system_prompt: str, user_message: str, json_mode: bool) -> str:
@@ -132,6 +136,11 @@ class DeepSeekAnalyzer:
         response = self._client.chat.completions.create(**kwargs)
         choice = response.choices[0]
         raw_content = choice.message.content or ""
+        logger.info(
+            "[DeepSeek] 返回完成: finish_reason=%s completion_tokens=%s",
+            getattr(choice, "finish_reason", None),
+            getattr(getattr(response, "usage", None), "completion_tokens", None),
+        )
         if not raw_content:
             logger.warning(
                 "[DeepSeek] 返回为空: finish_reason=%s prompt_tokens=%s completion_tokens=%s",
@@ -461,6 +470,14 @@ def _to_ai_analysis(parsed: Dict) -> AIAnalysis:
     news_impact = parsed.get("news_impact", {})
     symbols = parsed.get("symbols", {})
     symbol_map = _symbols_to_map(symbols)
+    guidance_map = _symbols_to_map(_safe_dict(parsed.get("position_guidance")).get("by_symbol"))
+    for symbol, detail in symbol_map.items():
+        if not isinstance(detail, dict) or str(detail.get("trade_conclusion", "")).strip().upper() != "NO_TRADE":
+            continue
+        guidance = _safe_dict(guidance_map.get(symbol))
+        reason = _safe_scalar(guidance.get("reason"))
+        if reason and not _safe_scalar(detail.get("trade_reason")):
+            detail["trade_reason"] = reason
     onchain = _safe_dict(parsed.get("onchain")) or _safe_dict(parsed.get("onchain_analysis"))
     follow_up = parsed.get("follow_up", parsed.get("watch_items"))
     return AIAnalysis(
@@ -640,6 +657,30 @@ def _symbols_to_map(value) -> Dict:
         if symbol:
             mapped[str(symbol)] = item
     return mapped
+
+
+def _validate_analysis_contract(parsed: Dict, context: MarketContext) -> None:
+    expected_symbols = {str(symbol) for symbol in context.tickers}
+    if not expected_symbols:
+        return
+    symbol_map = _symbols_to_map(parsed.get("symbols"))
+    missing = sorted(expected_symbols - set(symbol_map))
+    invalid = []
+    for symbol in sorted(expected_symbols & set(symbol_map)):
+        detail = symbol_map.get(symbol)
+        conclusion = str(detail.get("trade_conclusion", "")).strip().upper() if isinstance(detail, dict) else ""
+        if conclusion not in {"LONG", "SHORT", "NO_TRADE"}:
+            invalid.append(symbol)
+    validation = _safe_dict(parsed.get("validation"))
+    errors = []
+    if missing:
+        errors.append("缺少币种: " + ", ".join(missing))
+    if invalid:
+        errors.append("交易结论无效: " + ", ".join(invalid))
+    if validation.get("passed") is not True:
+        errors.append("缺少 validation.passed=true")
+    if errors:
+        raise ValueError("AI 结果合同不完整：" + "；".join(errors))
 
 
 def _safe_scalar(value) -> str:

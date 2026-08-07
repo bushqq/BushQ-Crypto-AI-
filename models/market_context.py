@@ -1,7 +1,7 @@
 """市场上下文数据模型 - Pipeline 各步骤传递的统一数据容器"""
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional
 from models.ticker import TickerData
 from models.kline import KlineData
 from models.news import NewsData
@@ -9,6 +9,9 @@ from models.fear_greed import FearGreedData
 from models.coin_info import CoinInfo
 from models.analysis import AnalysisData, TechnicalAnalysis, AIAnalysis
 from models.macro import MacroData, MarketStructureData, OnchainPublicData
+
+if TYPE_CHECKING:
+    from risk.trade_plan import TradePlan
 
 
 @dataclass
@@ -30,6 +33,7 @@ class MarketContext:
     # 分析结果
     tech_analyses: Dict[str, Dict[str, TechnicalAnalysis]] = field(default_factory=dict)  # {symbol: {timeframe: TA}}
     analyses: Dict[str, AnalysisData] = field(default_factory=dict)  # {symbol: AnalysisData}
+    trade_plans: Dict[str, "TradePlan"] = field(default_factory=dict)
 
     # 报告
     report_markdown: str = ""
